@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_role
 from app.core.security import UserRole
-from app.db.models import User, Violation, ViolationSeverity, ViolationType
+from app.db.models import Alert, User, Violation, ViolationSeverity, ViolationType
+from app.db.session import get_db
 from app.schemas import PaginatedResponse, ViolationCreate, ViolationResponse
 
 router = APIRouter(prefix="/violations", tags=["Violations"])
@@ -86,6 +87,17 @@ async def create_violation(
         metadata_=data.metadata,
     )
     db.add(violation)
+    await db.flush()
+
+    alert = Alert(
+        violation_id=violation.id,
+        camera_id=violation.camera_id,
+        site_id=violation.site_id,
+        title=f"Safety violation: {violation.violation_type.value}",
+        message=f"Detected {violation.violation_type.value} (confidence {float(violation.confidence):.0%})",
+        severity=violation.severity,
+    )
+    db.add(alert)
     await db.flush()
     await db.refresh(violation)
     return ViolationResponse.model_validate(violation)

@@ -48,7 +48,7 @@ export default function LoginPage() {
               <label className="text-sm font-medium">Email</label>
               <Input
                 type="email"
-                placeholder="admin@towerai.local"
+                placeholder="admin@towerai.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required

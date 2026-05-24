@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 # Auth
 # ---------------------------------------------------------------------------
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str  # allows dev seed admin@towerai.local (EmailStr rejects .local TLD)
     password: str
 
 

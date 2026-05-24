@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "../.env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -51,6 +51,15 @@ class Settings(BaseSettings):
 
     # AI Engine
     ai_engine_url: str = "http://localhost:8001"
+
+    # Supabase (optional — storage, edge functions, RLS reads)
+    supabase_project_ref: str = "edwdhyoghxnqrgzrocol"
+    supabase_url: str = ""
+    supabase_publishable_key: str = ""
+    supabase_service_role_key: str = ""
+    supabase_bucket_violations: str = "violation-screenshots"
+    supabase_bucket_recordings: str = "recordings"
+    supabase_violation_webhook_url: str = ""
 
     # WebSocket
     ws_heartbeat_interval: int = 30

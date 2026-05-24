@@ -45,6 +45,12 @@ lint-backend: ## Lint backend code
 clean: ## Remove containers, volumes, and build cache
 	docker compose down -v --remove-orphans
 
+dev-all: ## Start backend + frontend + AI engine locally
+	chmod +x scripts/dev/*.sh && ./scripts/dev/start-local.sh
+
+dev-sync-env: ## Copy Supabase keys from root .env to backend/.env
+	chmod +x scripts/dev/sync-env.sh && ./scripts/dev/sync-env.sh
+
 dev-backend: ## Run backend locally (requires local venv)
 	cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
@@ -53,6 +59,20 @@ dev-frontend: ## Run frontend locally
 
 dev-ai: ## Run AI engine locally
 	cd ai-engine && python -m app.main
+
+supabase-sync: ## Push migrations, gen types, deploy edge functions
+	chmod +x scripts/supabase/sync.sh && ./scripts/supabase/sync.sh
+
+supabase-push: ## Push DB migrations only
+	supabase migration repair 20260524120000 --status applied 2>/dev/null || true
+	supabase db push
+
+supabase-types: ## Regenerate frontend/src/types/supabase.ts
+	supabase gen types typescript --linked > frontend/src/types/supabase.ts
+
+supabase-functions: ## Deploy edge functions
+	supabase functions deploy health --no-verify-jwt
+	supabase functions deploy violation-webhook --no-verify-jwt
 
 dataset-download: ## Download reference YouTube videos
 	cd ai-engine && python3 scripts/download_videos.py

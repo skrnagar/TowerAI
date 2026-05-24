@@ -1,6 +1,5 @@
-# Supabase local development config
-# Project: edwdhyoghxnqrgzrocol
-# Link after installing CLI: supabase link --project-ref edwdhyoghxnqrgzrocol
+# Tower AI — Supabase project edwdhyoghxnqrgzrocol (SonilAi, Tokyo)
+# CLI: supabase login && supabase link --project-ref edwdhyoghxnqrgzrocol
 
 project_id = "edwdhyoghxnqrgzrocol"
 
@@ -16,6 +15,12 @@ port = 54322
 shadow_port = 54320
 major_version = 17
 
+[db.migrations]
+enabled = true
+
+[db.seed]
+enabled = false
+
 [studio]
 enabled = true
 port = 54323
@@ -28,13 +33,44 @@ port = 54324
 enabled = true
 file_size_limit = "50MiB"
 
+[storage.buckets.violation-screenshots]
+public = false
+file_size_limit = "50MiB"
+allowed_mime_types = ["image/png", "image/jpeg", "image/webp"]
+
+[storage.buckets.recordings]
+public = false
+file_size_limit = "500MiB"
+allowed_mime_types = ["video/mp4", "video/webm", "video/quicktime"]
+
 [auth]
 enabled = true
 site_url = "http://localhost:3000"
-additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+additional_redirect_urls = [
+  "http://localhost:3000/auth/callback",
+  "http://127.0.0.1:3000/auth/callback",
+]
 jwt_expiry = 3600
 enable_signup = true
+enable_anonymous_sign_ins = false
 
 [auth.email]
 enable_signup = true
 enable_confirmations = false
+
+[auth.external.google]
+enabled = false
+
+[edge_runtime]
+enabled = true
+policy = "per_worker"
+inspector_port = 8083
+
+[functions.violation-webhook]
+verify_jwt = false
+
+[functions.health]
+verify_jwt = false
+
+[analytics]
+enabled = false

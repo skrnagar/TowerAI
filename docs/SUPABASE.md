@@ -1,112 +1,170 @@
 # Supabase Integration
 
-Project ref: `edwdhyoghxnqrgzrocol`  
-Dashboard: https://supabase.com/dashboard/project/edwdhyoghxnqrgzrocol
+**Project:** `edwdhyoghxnqrgzrocol` (SonilAi)  
+**Region:** Northeast Asia (Tokyo) — pooler `aws-1-ap-northeast-1`  
+**Dashboard:** https://supabase.com/dashboard/project/edwdhyoghxnqrgzrocol
 
 ---
 
-## Frontend (Next.js)
+## What is configured (CLI)
 
-Packages: `@supabase/supabase-js`, `@supabase/ssr`
+| Feature | Status | Location |
+|---------|--------|----------|
+| **Database** | Schema on remote + migration history | `supabase/migrations/`, `infrastructure/postgres/init.sql` |
+| **Storage** | Buckets `violation-screenshots`, `recordings` | Migration `20260524120001_storage_buckets.sql` |
+| **Auth** | Email signup, localhost redirects | `supabase/config.toml` |
+| **RLS + Realtime** | SELECT for `authenticated`; full access for `service_role` | Migration `20260524120002_rls_and_realtime.sql` |
+| **Edge Functions** | `health`, `violation-webhook` | `supabase/functions/` |
+| **TypeScript types** | Generated from remote schema | `frontend/src/types/supabase.ts` |
 
-| File | Purpose |
-|------|---------|
-| `frontend/src/utils/supabase/client.ts` | Browser client |
-| `frontend/src/utils/supabase/server.ts` | Server Components / Route Handlers |
-| `frontend/src/utils/supabase/middleware.ts` | Session refresh |
-| `frontend/src/middleware.ts` | Applies session refresh on each request |
-| `frontend/src/app/auth/callback/route.ts` | OAuth / magic-link callback |
-| `frontend/.env.local` | Local keys (gitignored) |
+---
 
-### Environment variables
+## One-command sync
+
+From repo root (after `supabase login`):
 
 ```bash
-cp frontend/.env.local.example frontend/.env.local
+make supabase-sync
+# or
+./scripts/supabase/sync.sh
 ```
 
-Required:
+This will:
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+1. Mark baseline migration as applied (schema already exists)
+2. `supabase db push` — apply new migrations
+3. Regenerate `frontend/src/types/supabase.ts`
+4. Deploy edge functions
 
-### Usage in Server Components
+Individual targets: `make supabase-push`, `make supabase-types`, `make supabase-functions`
 
-```tsx
-import { createClient } from "@/utils/supabase/server";
+---
 
-export default async function Page() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data: rows } = await supabase.from("your_table").select();
-  // ...
+## Environment variables
+
+### Frontend (`frontend/.env.local`)
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://edwdhyoghxnqrgzrocol.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+### Backend (`backend/.env`)
+
+```bash
+SUPABASE_URL=https://edwdhyoghxnqrgzrocol.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SERVICE_ROLE_KEY=          # supabase projects api-keys (never commit)
+DATABASE_URL=postgresql+asyncpg://postgres.edwdhyoghxnqrgzrocol:PASSWORD@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres
+SUPABASE_VIOLATION_WEBHOOK_URL=https://edwdhyoghxnqrgzrocol.supabase.co/functions/v1/violation-webhook
+```
+
+Get keys:
+
+```bash
+supabase projects api-keys --project-ref edwdhyoghxnqrgzrocol
+```
+
+---
+
+## Database
+
+- **Canonical SQL:** `infrastructure/postgres/init.sql`
+- **Migrations:** `supabase/migrations/`
+- **Tables:** `sites`, `users`, `cameras`, `violations`, `alerts`, `recordings`, `audit_logs`
+- **Seed admin:** `admin@towerai.local` / `Admin@123` (FastAPI JWT; not Supabase Auth yet)
+
+Connection pooler (Session, port 6543 for transaction mode):
+
+```
+postgresql+asyncpg://postgres.edwdhyoghxnqrgzrocol:[PASSWORD]@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres
+```
+
+Inspect remote:
+
+```bash
+supabase inspect db table-stats --linked
+supabase migration list
+```
+
+---
+
+## Storage
+
+| Bucket | Purpose | Max size |
+|--------|---------|----------|
+| `violation-screenshots` | AI / alert frame captures | 50 MiB |
+| `recordings` | Camera segment archives | 500 MiB |
+
+**Backend upload** (service role): `backend/app/integrations/supabase_storage.py`  
+**Frontend signed URLs:** `frontend/src/lib/supabase-storage.ts`
+
+---
+
+## Auth strategy (dual)
+
+| Layer | Use |
+|-------|-----|
+| **FastAPI JWT** | Phase 1 API: `/api/v1/auth/login` with `public.users` |
+| **Supabase Auth** | Next.js session, OAuth callback, RLS-backed reads |
+
+Enable Supabase Auth users in Dashboard when ready; map `auth.users.id` → `public.users` in a future migration.
+
+---
+
+## Edge functions
+
+### `health`
+
+```bash
+curl https://edwdhyoghxnqrgzrocol.supabase.co/functions/v1/health
+```
+
+### `violation-webhook`
+
+POST JSON from AI engine (uses service role server-side):
+
+```json
+{
+  "camera_id": "uuid",
+  "site_id": "uuid",
+  "violation_type": "helmet_off",
+  "severity": "high",
+  "confidence": 0.92,
+  "frame_timestamp": "2026-05-25T12:00:00Z",
+  "bounding_boxes": [],
+  "screenshot_key": "optional/path.jpg"
 }
 ```
 
-### Usage in Client Components
+Deploy:
+
+```bash
+supabase functions deploy violation-webhook --no-verify-jwt
+```
+
+---
+
+## Realtime (dashboard)
+
+Tables in publication `supabase_realtime`: `violations`, `alerts`, `cameras`.
 
 ```tsx
-"use client";
-import { createClient } from "@/utils/supabase/client";
-
 const supabase = createClient();
+supabase
+  .channel("violations")
+  .on("postgres_changes", { event: "INSERT", schema: "public", table: "violations" }, (p) => {
+    console.log(p.new);
+  })
+  .subscribe();
 ```
-
----
-
-## Supabase CLI
-
-Install (macOS):
-
-```bash
-brew install supabase/tap/supabase
-```
-
-Then from repo root:
-
-```bash
-supabase login
-supabase link --project-ref edwdhyoghxnqrgzrocol
-```
-
-`supabase init` is already done — config lives in `supabase/config.toml`.
-
-Pull remote schema:
-
-```bash
-supabase db pull
-```
-
-Push local migrations:
-
-```bash
-supabase db push
-```
-
----
-
-## Backend (FastAPI) — PostgreSQL
-
-Use the **Session pooler** connection string if your network is IPv4-only.
-
-Direct (IPv6):
-
-```
-postgresql://postgres:[YOUR-PASSWORD]@db.edwdhyoghxnqrgzrocol.supabase.co:5432/postgres
-```
-
-Async SQLAlchemy (backend):
-
-```
-DATABASE_URL=postgresql+asyncpg://postgres.[YOUR-PASSWORD]@aws-0-[region].pooler.supabase.com:6543/postgres
-```
-
-Set in root `.env` and restart `backend` service.
 
 ---
 
 ## MCP (Cursor)
 
-Configured in `.cursor/mcp.json`:
+`.cursor/mcp.json`:
 
 ```json
 {
@@ -118,21 +176,15 @@ Configured in `.cursor/mcp.json`:
 }
 ```
 
-Reload Cursor after editing MCP config.
-
 ---
 
-## Optional: Agent Skills
+## Local dev (optional)
+
+Requires Docker Desktop:
 
 ```bash
-npx skills add supabase/agent-skills
+supabase start
+supabase status
 ```
 
----
-
-## Auth strategy
-
-- **Phase 1 MVP:** FastAPI JWT (`/api/v1/auth/login`) for API access  
-- **Supabase Auth:** Use for Next.js session, RLS-backed reads, and future user management  
-
-Both can run in parallel until you migrate users to `auth.users` in Supabase.
+Without Docker, use **linked remote** only (`--linked` flags) as this project does.

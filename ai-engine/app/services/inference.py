@@ -46,7 +46,16 @@ class YOLOInferenceEngine:
             import torch
             from ultralytics import YOLO
 
-            self.device = "cuda" if settings.ai_gpu_enabled and torch.cuda.is_available() else "cpu"
+            if settings.ai_gpu_enabled and torch.cuda.is_available():
+                self.device = "cuda"
+            elif (
+                settings.ai_gpu_enabled
+                and getattr(torch.backends, "mps", None)
+                and torch.backends.mps.is_available()
+            ):
+                self.device = "mps"
+            else:
+                self.device = "cpu"
             self.model = YOLO(settings.yolo_model_path)
 
             if settings.ai_ensemble_enabled:

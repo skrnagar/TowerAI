@@ -212,6 +212,7 @@ CREATE TRIGGER trg_alerts_updated_at BEFORE UPDATE ON alerts
 
 -- ---------------------------------------------------------------------------
 -- Seed: Default site and admin user (password: Admin@123 — change in production)
+-- Email: admin@towerai.com (also accepts legacy admin@towerai.local in DB if migrated)
 -- Hash generated with bcrypt rounds=12
 -- ---------------------------------------------------------------------------
 INSERT INTO sites (id, name, code, description, timezone)
@@ -226,8 +227,8 @@ VALUES (
 INSERT INTO users (id, email, password_hash, full_name, role, site_id)
 VALUES (
     'b0000000-0000-0000-0000-000000000001',
-    'admin@towerai.local',
-    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G2oX.Q3K5xK5xu',
+    'admin@towerai.com',
+    '$2b$12$zg5p/Xt.tOS07rmYXiJDUOgIZhgkqFkAtxVQQHnTu1rqbR0LsDijC',
     'System Administrator',
     'admin',
     'a0000000-0000-0000-0000-000000000001'
