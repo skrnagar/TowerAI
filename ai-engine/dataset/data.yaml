@@ -1,0 +1,18 @@
+# Tower AI Safety — YOLO Dataset Configuration (Blueprint v2.0)
+# Update `path` to your local dataset root before training
+
+path: /dataset
+train: images/train
+val: images/val
+test: images/test
+
+nc: 8
+names:
+  - helmet_on
+  - helmet_off
+  - harness_on
+  - harness_off
+  - person_tower
+  - unsafe_climbing
+  - restricted_zone
+  - lifeline_attached

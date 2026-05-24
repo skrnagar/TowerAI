@@ -1,0 +1,265 @@
+# =============================================================================
+# TOWER AI SAFETY MONITORING SYSTEM
+# Production-grade Docker Compose — Phase 1 MVP
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Reverse Proxy
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: towerai-nginx
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - towerai-network
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Frontend — Next.js 15 Dashboard
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/frontend.Dockerfile
+      target: development
+    container_name: towerai-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-ws://localhost:8000/ws}
+      - NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME:-Tower AI Safety}
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-}
+      - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
+    env_file:
+      - ./frontend/.env.local
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3000:3000"
+    networks:
+      - towerai-network
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Backend — FastAPI API + WebSocket Gateway
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../docker/backend.Dockerfile
+    container_name: towerai-backend
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-towerai}:${POSTGRES_PASSWORD:-towerai_secure_password}@postgres:5432/${POSTGRES_DB:-towerai_db}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - AI_ENGINE_URL=http://ai-engine:8001
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - towerai-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ---------------------------------------------------------------------------
+  # Celery Worker — Async task processing (alerts, incident logging)
+  # ---------------------------------------------------------------------------
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: ../docker/backend.Dockerfile
+    container_name: towerai-celery-worker
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=4
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-towerai}:${POSTGRES_PASSWORD:-towerai_secure_password}@postgres:5432/${POSTGRES_DB:-towerai_db}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - towerai-network
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Celery Beat — Scheduled tasks
+  # ---------------------------------------------------------------------------
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: ../docker/backend.Dockerfile
+    container_name: towerai-celery-beat
+    command: celery -A app.celery_app beat --loglevel=info
+    env_file:
+      - .env
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - celery-worker
+    networks:
+      - towerai-network
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # AI Engine — YOLO Inference + DeepSORT Tracking
+  # ---------------------------------------------------------------------------
+  ai-engine:
+    build:
+      context: ./ai-engine
+      dockerfile: ../docker/ai-engine.Dockerfile
+    container_name: towerai-ai-engine
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - BACKEND_URL=http://backend:8000
+      - MINIO_ENDPOINT=minio:9000
+    volumes:
+      - ./ai-engine:/app
+      - ai-models:/models
+    ports:
+      - "8001:8001"
+    depends_on:
+      - redis
+      - minio
+    networks:
+      - towerai-network
+    restart: unless-stopped
+    # Uncomment for NVIDIA GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — Primary database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: towerai-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-towerai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-towerai_secure_password}
+      POSTGRES_DB: ${POSTGRES_DB:-towerai_db}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - towerai-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-towerai} -d ${POSTGRES_DB:-towerai_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Redis — Cache, pub/sub, Celery broker
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: towerai-redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - towerai-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # MinIO — S3-compatible object storage (screenshots, recordings)
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    container_name: towerai-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-towerai_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-towerai_minio_secret}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - towerai-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # MinIO Init — Create default buckets on startup
+  # ---------------------------------------------------------------------------
+  minio-init:
+    image: minio/mc:latest
+    container_name: towerai-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set towerai http://minio:9000 ${MINIO_ACCESS_KEY:-towerai_minio} ${MINIO_SECRET_KEY:-towerai_minio_secret};
+      mc mb --ignore-existing towerai/${MINIO_BUCKET_VIOLATIONS:-towerai-violations};
+      mc mb --ignore-existing towerai/${MINIO_BUCKET_RECORDINGS:-towerai-recordings};
+      exit 0;
+      "
+    networks:
+      - towerai-network
+
+networks:
+  towerai-network:
+    driver: bridge
+    name: towerai-network
+
+volumes:
+  postgres-data:
+    name: towerai-postgres-data
+  redis-data:
+    name: towerai-redis-data
+  minio-data:
+    name: towerai-minio-data
+  ai-models:
+    name: towerai-ai-models

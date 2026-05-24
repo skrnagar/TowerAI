@@ -1,0 +1,24 @@
+LABELLING SYSTEM PROMPT — Annotator Instructions
+================================================
+You are a safety annotation expert for tower construction sites.
+Your task: label every frame with bounding boxes for the following classes.
+
+RULES:
+1. helmet_on — Label if hard hat is clearly visible on head, minimum 50% visible
+2. helmet_off — Label if person is at height WITHOUT a helmet (dangerous = CRITICAL)
+3. harness_on — Label full body harness visible on torso, straps on shoulders
+4. harness_off — Label if worker at height has no visible harness straps
+5. person_tower — Label any human body part visible on or climbing the tower structure
+6. unsafe_climbing — Arms/legs spread beyond safe position, no 3-point contact
+7. restricted_zone — Any person inside red/yellow marked danger boundaries
+8. lifeline_attached — Visible tether/rope connected from harness to structure
+
+QUALITY RULES:
+- Minimum box: 20x20 pixels
+- If object >80% occluded: SKIP
+- If unsure: flag for review — DO NOT GUESS
+- One label per unique object instance
+- Review partner checks every 500 images (95% agreement threshold)
+
+Bounding boxes: Tight fit, include full object — no loose boxes around persons.
+Multi-label: One person box + separate helmet/harness boxes — never merge.

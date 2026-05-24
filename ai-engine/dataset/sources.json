@@ -1,0 +1,31 @@
+{
+  "description": "Reference YouTube videos for Tower AI training and test splits",
+  "extract_fps": 1,
+  "videos": [
+    {
+      "id": "vDGtISwKO2A",
+      "url": "https://www.youtube.com/shorts/vDGtISwKO2A",
+      "status": "downloaded",
+      "frames_extracted": 6,
+      "split": "test"
+    },
+    {
+      "id": "K6YHA3p3APM",
+      "url": "https://youtu.be/K6YHA3p3APM",
+      "status": "downloaded",
+      "frames_extracted": 783,
+      "split": "train"
+    },
+    {
+      "id": "vrDC-Dfnnhw",
+      "url": "https://www.youtube.com/watch?v=vrDC-Dfnnhw",
+      "status": "pending_download",
+      "note": "Large file (~400MB+) — free disk space before re-download"
+    },
+    {
+      "id": "SNvZm2Vnwnc",
+      "url": "https://youtu.be/SNvZm2Vnwnc",
+      "status": "pending_download"
+    }
+  ]
+}

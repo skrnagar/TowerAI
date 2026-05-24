@@ -1,0 +1,77 @@
+# Environment
+.env
+.env.local
+.env.*.local
+frontend/.env.local
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# AI / ML
+*.pt
+*.pth
+*.onnx
+*.weights
+models/checkpoints/
+runs/
+wandb/
+
+# Dataset (large — keep structure, ignore binaries)
+ai-engine/dataset/raw/videos/
+ai-engine/dataset/raw/frames/
+ai-engine/dataset/images/
+ai-engine/dataset/labels/
+!ai-engine/dataset/README.md
+!ai-engine/dataset/data.yaml
+
+# Storage
+data/
+uploads/
+recordings/
+screenshots/
+minio-data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Docker
+docker/volumes/
+
+# Logs
+logs/
+*.log
+
+# Database
+*.sqlite3
